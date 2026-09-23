@@ -33,6 +33,16 @@ diary:
     access-expire-seconds: ${JWT_ACCESS_EXPIRE:1800}
     # Refresh Token 有效期（秒），默认 7 天
     refresh-expire-seconds: ${JWT_REFRESH_EXPIRE:604800}
+  minio:
+    # 后端访问 MinIO 的地址；容器部署时应为内网地址（如 http://minio:9000）
+    endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9000}
+    # 浏览器访问地址，与 endpoint 分离：容器部署时需指向宿主机对外地址
+    public-endpoint: ${MINIO_PUBLIC_ENDPOINT:http://127.0.0.1:9000}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    bucket: ${MINIO_BUCKET:diary}
+    # 单文件大小上限（字节），默认 5MB
+    max-file-size: ${MINIO_MAX_FILE_SIZE:5242880}
 
 logging:
   level:

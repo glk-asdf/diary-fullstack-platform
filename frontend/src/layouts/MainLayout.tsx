@@ -2,14 +2,28 @@ import { useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   BookOutlined,
+  BulbOutlined,
   DashboardOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  TagsOutlined,
   UserOutlined,
 } from '@ant-design/icons'
-import { Avatar, Button, Dropdown, Flex, Layout, Menu, Typography, message } from 'antd'
+import {
+  Avatar,
+  Button,
+  Dropdown,
+  Flex,
+  Layout,
+  Menu,
+  Tooltip,
+  Typography,
+  message,
+  theme,
+} from 'antd'
 import { authApi } from '@/api/auth'
+import { useThemeStore } from '@/store/useThemeStore'
 import { useUserStore } from '@/store/useUserStore'
 
 const { Header, Sider, Content } = Layout
@@ -17,6 +31,7 @@ const { Text } = Typography
 
 const MENU_ITEMS = [
   { key: '/diaries', icon: <BookOutlined />, label: '日记' },
+  { key: '/tags', icon: <TagsOutlined />, label: '标签' },
   { key: '/stats', icon: <DashboardOutlined />, label: '统计' },
   { key: '/profile', icon: <UserOutlined />, label: '我的' },
 ]
@@ -25,9 +40,13 @@ export default function MainLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
+  const { token } = theme.useToken()
+
   const user = useUserStore((state) => state.user)
   const refreshToken = useUserStore((state) => state.refreshToken)
   const clear = useUserStore((state) => state.clear)
+  const mode = useThemeStore((state) => state.mode)
+  const toggleTheme = useThemeStore((state) => state.toggle)
 
   const selectedKey =
     MENU_ITEMS.find((item) => location.pathname.startsWith(item.key))?.key ?? '/diaries'
@@ -48,11 +67,19 @@ export default function MainLayout() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible collapsed={collapsed} trigger={null} theme="light">
+      <Sider
+        collapsible
+        collapsed={collapsed}
+        trigger={null}
+        theme={mode === 'dark' ? 'dark' : 'light'}
+        // 窄屏自动折叠，避免挤压内容区
+        breakpoint="lg"
+        onBreakpoint={(broken) => setCollapsed(broken)}
+      >
         <Flex
           align="center"
           justify="center"
-          style={{ height: 56, borderBottom: '1px solid #f0f0f0' }}
+          style={{ height: 56, borderBottom: `1px solid ${token.colorBorderSecondary}` }}
         >
           <Text strong style={{ fontSize: collapsed ? 16 : 18 }}>
             {collapsed ? '日' : '日记平台'}
@@ -71,12 +98,12 @@ export default function MainLayout() {
       <Layout>
         <Header
           style={{
-            background: '#fff',
+            background: token.colorBgContainer,
             padding: '0 16px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            borderBottom: '1px solid #f0f0f0',
+            borderBottom: `1px solid ${token.colorBorderSecondary}`,
           }}
         >
           <Button
@@ -86,20 +113,36 @@ export default function MainLayout() {
             onClick={() => setCollapsed((prev) => !prev)}
           />
 
-          <Dropdown
-            menu={{
-              items: [
-                { key: 'profile', icon: <UserOutlined />, label: '个人中心', onClick: () => navigate('/profile') },
-                { type: 'divider' },
-                { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: handleLogout },
-              ],
-            }}
-          >
-            <Flex align="center" gap={8} style={{ cursor: 'pointer', padding: '0 8px' }}>
-              <Avatar src={user?.avatar} icon={<UserOutlined />} />
-              <Text>{user?.nickname ?? user?.username ?? '未登录'}</Text>
-            </Flex>
-          </Dropdown>
+          <Flex align="center" gap={4}>
+            <Tooltip title={mode === 'dark' ? '切换到亮色模式' : '切换到暗色模式'}>
+              <Button
+                type="text"
+                aria-label="切换主题"
+                icon={<BulbOutlined />}
+                onClick={toggleTheme}
+              />
+            </Tooltip>
+
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'profile',
+                    icon: <UserOutlined />,
+                    label: '个人中心',
+                    onClick: () => navigate('/profile'),
+                  },
+                  { type: 'divider' },
+                  { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: handleLogout },
+                ],
+              }}
+            >
+              <Flex align="center" gap={8} style={{ cursor: 'pointer', padding: '0 8px' }}>
+                <Avatar src={user?.avatar} icon={<UserOutlined />} />
+                <Text>{user?.nickname ?? user?.username ?? '未登录'}</Text>
+              </Flex>
+            </Dropdown>
+          </Flex>
         </Header>
 
         <Content style={{ margin: 16 }}>

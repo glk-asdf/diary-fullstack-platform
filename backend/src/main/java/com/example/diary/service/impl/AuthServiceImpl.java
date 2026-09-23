@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.diary.common.exception.BizException;
 import com.example.diary.common.result.ResultCode;
 import com.example.diary.common.util.JwtUtil;
+import com.example.diary.converter.UserConverter;
 import com.example.diary.dto.LoginDTO;
 import com.example.diary.dto.RegisterDTO;
 import com.example.diary.entity.User;
@@ -58,7 +59,7 @@ public class AuthServiceImpl implements AuthService {
         userMapper.insert(user);
 
         log.info("新用户注册成功: id={}, username={}", user.getId(), user.getUsername());
-        return toVO(user);
+        return UserConverter.toVO(user);
     }
 
     @Override
@@ -122,10 +123,6 @@ public class AuthServiceImpl implements AuthService {
 
         refreshTokenStore.save(user.getId(), refresh.jti(), user.getUsername(), jwtUtil.getRefreshExpireSeconds());
 
-        return new TokenVO(access.token(), refresh.token(), access.expiresInSeconds(), toVO(user));
-    }
-
-    private UserVO toVO(User user) {
-        return new UserVO(user.getId(), user.getUsername(), user.getNickname(), user.getAvatar(), user.getEmail());
+        return new TokenVO(access.token(), refresh.token(), access.expiresInSeconds(), UserConverter.toVO(user));
     }
 }

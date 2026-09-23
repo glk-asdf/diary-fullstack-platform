@@ -36,11 +36,8 @@ export default function Login() {
     <Flex
       align="center"
       justify="center"
-      style={{
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #e6f4ff 0%, #f5f5f5 60%)',
-        padding: 24,
-      }}
+      className="auth-page-bg"
+      style={{ minHeight: '100vh', padding: 24 }}
     >
       <Card style={{ width: 400, boxShadow: '0 8px 24px rgba(0, 0, 0, 0.08)' }}>
         <Flex vertical align="center" style={{ marginBottom: 24 }}>

@@ -23,11 +23,11 @@
 | P0 | 环境与工程初始化 | - | 0.5 天 | 前后端能各自启动 | ✅ 已完成（2026-09-23） |
 | P1 | 数据库与后端骨架 | P0 | 1 天 | 建表完成 + 分页/逻辑删除/自动填充生效 | ✅ 已完成（2026-09-23） |
 | P2 | 认证全链路 | P1 | 2 天 | 注册登录刷新登出闭环 | ✅ 已完成（2026-09-23） |
-| P3 | 日记 CRUD | P2 | 2 天 | 列表分页 + 详情 + 增删改 | ⬜ 待开始 |
-| P4 | 标签与筛选 | P3 | 1.5 天 | 多条件组合筛选 | ⬜ 待开始 |
-| P5 | 图片上传 MinIO | P3 | 1.5 天 | Markdown 插图可用 | ⬜ 待开始 |
-| P6 | Markdown 渲染与编辑器完善 | P3 | 1 天 | 编辑/预览/防 XSS | ⬜ 待开始 |
-| P7 | 统计页 | P4 | 1.5 天 | 热力图 + 心情分布 | ⬜ 待开始 |
+| P3 | 日记 CRUD | P2 | 2 天 | 列表分页 + 详情 + 增删改 | ✅ 已完成（2026-09-23） |
+| P4 | 标签与筛选 | P3 | 1.5 天 | 多条件组合筛选 | ✅ 已完成（2026-09-23） |
+| P5 | 图片上传 MinIO | P3 | 1.5 天 | Markdown 插图可用 | ✅ 已完成（2026-09-23） |
+| P6 | 前端体验完善 | P3 | 1 天 | 懒加载分包 + 主题 + 错误边界 | ✅ 已完成（2026-09-23） |
+| P7 | 统计页 | P4 | 1.5 天 | 热力图 + 心情分布 | ✅ 已完成（2026-09-23） |
 | P8 | 部署与上线 | P3~P7 | 1.5 天 | 单机一键部署 | ⬜ 待开始 |
 | P9 | 可选扩展 | P8 | 按需 | 分享 / 导出 / 备份 | ⬜ 待开始 |
 
@@ -429,7 +429,7 @@ diary-fullstack-platform/
 
 ---
 
-## P3 · 日记 CRUD（2 天）
+## P3 · 日记 CRUD（2 天）✅ 已完成（2026-09-23）
 
 ### 目标
 日记的新增、编辑、删除、分页列表、详情全部可用，前端列表页与编辑页跑通。
@@ -477,9 +477,80 @@ diary-fullstack-platform/
 - 分页参数越界 → 后端限制 `size` 上限（如 ≤ 50）。
 - 编辑页表单与详情数据回填异步竞态 → 用 `enabled: !!id` 控制查询。
 
+### 完成记录（2026-09-23）✅
+
+**新增代码**
+
+后端：
+
+| 文件 | 作用 |
+|---|---|
+| `entity/Tag.java`、`entity/DiaryTag.java` | 标签表与关联表映射（关联表把 `diary_id` 声明为主键，便于批量清除某篇日记的标签） |
+| `mapper/TagMapper.java`、`mapper/DiaryTagMapper.java` | 数据访问 |
+| `dto/DiarySaveDTO.java` | 新建 / 更新入参 |
+| `dto/DiaryQueryDTO.java` | 查询条件，附 `pageOrDefault()` / `sizeOrDefault()`（size 上限 50） |
+| `vo/TagVO.java`、`vo/DiaryVO.java`、`vo/DiaryDetailVO.java` | 出参（列表项刻意不含 content） |
+| `converter/DiaryConverter.java` | 实体 → 出参转换 |
+| `converter/UserConverter.java` | 抽出 P2 中重复的 UserVO 转换 |
+| `service/DiaryService.java` + `impl/DiaryServiceImpl.java` | 摘要生成、筛选、标签装配、越权校验 |
+| `controller/DiaryController.java` | 5 个接口 |
+
+前端：
+
+| 文件 | 作用 |
+|---|---|
+| `types/api.ts`、`types/diary.ts` | 分页类型、日记类型、心情枚举（含 emoji 与配色） |
+| `api/diary.ts` | 接口封装 |
+| `hooks/useDiaryList.ts` | 列表 / 详情查询 + 增删改 mutation（统一失效 `diaries` 缓存） |
+| `components/DiaryCard/` | 日记卡片（标题、摘要、日期、天气、心情、标签） |
+| `components/MoodPicker/` | 心情选择器，受控组件可直接放进 Form.Item |
+| `pages/DiaryList/` | 卡片 / 时间轴切换、关键词与筛选、分页、空态与骨架屏 |
+| `pages/DiaryDetail/` | Markdown 渲染（`react-markdown` + `rehype-sanitize` 防 XSS）、编辑与删除 |
+| `pages/DiaryEdit/` | 新建与编辑复用，`@uiw/react-md-editor` 实时预览 |
+| `router/index.tsx` | 新增 `diaries/new`、`diaries/:id`、`diaries/:id/edit` 三条路由 |
+| `index.css` | Markdown 渲染样式（标题、引用、代码块、表格等） |
+
+**设计取舍（与架构文档的差异）**
+
+1. **不使用 MapStruct**，改为手写 `converter/*` 静态方法。转换点少且字段固定，手写可省掉注解处理器配置，与「不用 Lombok、减少编译期魔法」的取向一致。
+2. **`DiaryCreateDTO` 与 `DiaryUpdateDTO` 合并为 `DiarySaveDTO`**：两者字段完全一致（都是全量提交），拆成两份只是重复。
+3. **列表查询显式 `select()` 裁剪字段**，绝不读取 LONGTEXT 的 `content`；`size` 上限 50，超限自动收敛。
+4. **标签装配避免 N+1**：先按 `diary_id IN (...)` 查关联，再按 `tag_id IN (...)` 取标签，最后内存分组。
+5. **越权一律返回 404**（而非 403），避免通过状态码探测他人资源是否存在。
+6. **删除日记时保留关联表记录**：日记是逻辑删除，保留标签关联便于日后做回收站恢复。
+
+**验收实测结果**
+
+| 验收项 | 方式 | 结果 |
+|---|---|---|
+| 单元测试 | `.\mvnw.cmd test` | ✅ 8 个全通过（Mapper 1 + Auth 2 + Diary 5） |
+| 创建 + 摘要生成 | `POST /api/v1/diaries` | ✅ 摘要 = `今天 天气很好，和朋友去 爬山 了。`，`#`/`**`/`![图](...)` 均被清除 |
+| 列表字段裁剪 | `GET /api/v1/diaries` | ✅ 返回字段不含 `content` |
+| 关键词 / 心情 / 日期筛选 | query 参数组合 | ✅ 命中与排除均正确 |
+| `size` 越界 | `?size=500` | ✅ 实际 `size=50` |
+| 详情 | `GET /api/v1/diaries/{id}` | ✅ 含正文与标签 |
+| 更新 | `PUT /api/v1/diaries/{id}` | ✅ 更新后按新心情筛选可命中 |
+| 逻辑删除 | `DELETE` → 再查询 | ✅ 详情 404、列表 total=0，库中 `deleted=1` |
+| 未认证访问 | 无 token | ✅ HTTP 401 |
+| 前端构建 | `npm run build` | ✅ 2323 KB（gzip 759 KB） |
+
+**踩坑记录**
+
+1. **record 的访问器是 `id()` 而不是 `getId()`**：测试里用 `DiaryVO::getId` / `vo.getMood()` 直接编译失败，需改用 `DiaryVO::id` / `vo.mood()`。
+2. **PowerShell 5.1 的 `Invoke-RestMethod` 会写坏中文**：未在 `ContentType` 指定 charset 时，会按 Latin-1 编码请求体，导致中文全部变成 `?` 落库。**这不是应用问题**（curl 与浏览器均正常），修复方式是传 `[System.Text.Encoding]::UTF8.GetBytes($json)` 作为 body。后续用 PowerShell 做接口验证时务必注意。
+3. 后端 jar 正在运行时无法重新 `package`（文件被占用），需先停进程。
+
+**遗留事项**
+
+1. 前端单 chunk 已达 2.3 MB（gzip 759 KB）→ 交由 P6 路由懒加载处理。
+2. 浏览器 UI 交互（卡片/时间轴切换、编辑器预览、删除二次确认）未自动化验证，需人工确认。
+3. 标签目前只能通过数据库或后续 P4 接口创建，编辑页尚未接入标签选择（属 P4 范围）。
+
+**下一步（P4）**：标签 CRUD 接口与管理 UI、编辑页标签选择、筛选条件同步到 URL。
+
 ---
 
-## P4 · 标签与筛选（1.5 天）
+## P4 · 标签与筛选（1.5 天）✅ 已完成（2026-09-23）
 
 ### 目标
 标签可管理，日记列表支持关键词、标签、心情、日期区间多维筛选。
@@ -517,9 +588,59 @@ diary-fullstack-platform/
 - 多表关联 N+1 → 批量查询后内存拼装。
 - 标签删除后残留脏关联 → 事务内双删。
 
+### 完成记录（2026-09-23）✅
+
+**新增代码**
+
+后端：
+
+| 文件 | 作用 |
+|---|---|
+| `dto/TagSaveDTO.java` | 标签入参（名称 + 颜色） |
+| `service/TagService.java` + `impl/TagServiceImpl.java` | 标签 CRUD，含同用户重名校验与「删除时解除日记关联」 |
+| `controller/TagController.java` | 4 个接口 |
+
+前端：
+
+| 文件 | 作用 |
+|---|---|
+| `api/tag.ts`、`hooks/useTags.ts` | 标签接口与查询 / 变更（变更后同步失效日记缓存） |
+| `hooks/useDebounce.ts` | 300ms 防抖 |
+| `components/TagSelect/` | 多选标签，支持在下拉里直接创建（名称 + 取色器） |
+| `pages/TagManage/` | 标签管理页：新建 / 编辑 / 删除 |
+| `pages/DiaryList/` | 标签筛选、**筛选条件同步到 URL**、搜索框防抖 |
+| `pages/DiaryEdit/` | 接入标签选择 |
+| `router/index.tsx`、`layouts/MainLayout.tsx` | 新增 `/tags` 路由与侧边栏入口 |
+
+**设计取舍**
+
+1. **筛选条件以 URL 为唯一数据源**：刷新或分享链接后筛选状态可复原。搜索框用本地 state + 300ms 防抖后再回写 URL，既保证不逐字触发请求，也让 URL 成为单一真相来源。
+2. **标签删除采用「事务内先解除关联再删除」**，与 P3「删除日记时保留关联」互补：标签是主数据，删除后保留关联只会产生指向空标签的脏数据。
+3. **`TagSelect` 支持下拉内直接创建标签**，创建后自动选中，省掉一次页面跳转。
+
+**验收实测结果**
+
+| 验收项 | 方式 | 结果 |
+|---|---|---|
+| 单元测试 | `.\mvnw.cmd test` | ✅ 10 个全通过（新增 TagServiceTest 2 个） |
+| 创建标签 | `POST /api/v1/tags` | ✅ 返回 id 与颜色，不传颜色时使用默认 `#1677ff` |
+| 同用户重名 | 再次 POST 同名 | ✅ HTTP 400「标签名已存在」 |
+| 跨用户同名 | 另一用户创建同名标签 | ✅ 可共存，双方列表互不可见 |
+| 越权操作他人标签 | 改 / 删 | ✅ 404「标签不存在」 |
+| 标签关联日记 | 创建带 `tagIds` 的日记 | ✅ 详情返回 `tags`，`?tagId=7` 筛选命中 |
+| 删除标签联动 | 删除后查日记详情与筛选 | ✅ 日记 `tags: []`，按该标签筛选 total=0 |
+| 前端构建 | `npm run build` | ✅ 2452 KB（gzip 797 KB） |
+
+**遗留事项**
+
+1. 前端单 chunk 已达 2.45 MB（gzip 797 KB）→ 交由 P6 路由懒加载处理。
+2. 浏览器 UI 交互（下拉内建标签、URL 回填筛选、颜色选择器）未自动化验证，需人工确认。
+
+**下一步（P5）**：接入 MinIO，支持图片上传并在 Markdown 中插图（编辑器拖拽上传）。
+
 ---
 
-## P5 · 图片上传 MinIO（1.5 天）
+## P5 · 图片上传 MinIO（1.5 天）✅ 已完成（2026-09-23）
 
 ### 目标
 支持图片上传到 MinIO，返回可访问 URL，Markdown 编辑器可插图。
@@ -559,9 +680,89 @@ diary-fullstack-platform/
 - 图片过大影响加载 → 后续可加压缩/缩略图。
 - 跨域直传 → 单机方案走后端中转即可，不开放 MinIO 直传。
 
+### 完成记录（2026-09-23）✅
+
+**存储选型变更（重要）**
+
+执行本阶段前探测发现 **MinIO 开源版已被官方归档**：
+
+```text
+HTTP/1.1 410 Gone
+The open-source MinIO Server, MinIO Client (mc) and MinIO KES projects are
+archived and no longer maintained. MinIO does not provide product support,
+security updates, or security advisories for them...
+These files are no longer served from this site.
+```
+
+官方已转向商业产品 AIStor，社区版不再提供下载、安全更新与漏洞响应。经确认后采用**归档版 MinIO**（国内镜像 `dl.minio.org.cn`，112 MB），版本 `RELEASE.2025-07-23T15-54-02Z`。
+
+> **风险提示**：归档版无安全更新，仅适合本地 / 内网学习。若将来部署到公网，建议改用 SeaweedFS 等活跃维护的 S3 兼容方案，或直接使用云厂商 OSS——两者都能通过 AWS S3 SDK 平滑替换，本阶段代码只需替换 MinIO SDK 调用部分。
+
+**中间件**
+
+| 项 | 值 |
+|---|---|
+| 版本 | MinIO `RELEASE.2025-07-23T15-54-02Z`（归档版） |
+| 安装目录 | `D:\business\tools\minio`（`minio.exe` 112 MB + `data` 目录） |
+| 启停脚本 | `D:\business\tools\minio-start.ps1`、`minio-stop.ps1` |
+| 端点 | S3 API `127.0.0.1:9000`，Web 控制台 `127.0.0.1:9001` |
+| 凭据 | `minioadmin` / `minioadmin` |
+
+**新增代码**
+
+后端：
+
+| 文件 | 作用 |
+|---|---|
+| `config/MinioProperties.java` | 配置绑定（endpoint / publicEndpoint / 凭据 / bucket / 大小上限） |
+| `config/MinioConfig.java` | `MinioClient` Bean |
+| `config/MinioBucketInitializer.java` | 启动时自动创建 bucket 并设为公开只读；MinIO 不可用只告警不阻断启动 |
+| `entity/Attachment.java`、`mapper/AttachmentMapper.java` | 附件落库 |
+| `vo/FileVO.java` | 上传结果 |
+| `service/FileService.java` + `impl/FileServiceImpl.java` | 校验 + 上传 + 落库 |
+| `controller/FileController.java` | `POST /api/v1/files/upload` |
+
+前端：
+
+| 文件 | 作用 |
+|---|---|
+| `api/file.ts` | 上传接口（FormData 交给 axios 自动处理 boundary，不手动设 Content-Type） |
+| `components/MarkdownEditor/` | 封装 MDEditor，支持按钮 / 拖拽 / 粘贴三种插图方式 |
+| `pages/DiaryEdit/` | 改用新的编辑器组件 |
+
+**设计取舍**
+
+1. **`endpoint` 与 `publicEndpoint` 分离**：后端访问地址与浏览器访问地址解耦。容器部署时前者为 `http://minio:9000`、后者为宿主机对外地址，无需改代码——这正是原方案风险清单里那条「内网地址浏览器不可达」的解法。
+2. **bucket 设为公开只读**（仅 `s3:GetObject`，不允许列举对象）：日记里的图片 URL 需要长期有效，因此不采用会过期的预签名 URL；对象名含 UUID 不可枚举。
+3. **上传走后端中转，不开放 MinIO 直传**：可在后端统一做鉴权、类型与大小校验，也免去浏览器跨域配置。
+4. **双重白名单**：扩展名与 MIME 类型都校验，防止改扩展名绕过。
+5. **对象名按 `yyyy/MM/<uuid>.<ext>` 组织**：既避免文件名冲突，也杜绝路径穿越。
+
+**验收实测结果**
+
+| 验收项 | 方式 | 结果 |
+|---|---|---|
+| bucket 自动创建 | 启动日志 | ✅ `已创建 MinIO bucket: diary` / `MinIO bucket 就绪: diary（公开只读）` |
+| 上传图片 | `POST /api/v1/files/upload` | ✅ 返回 `http://127.0.0.1:9000/diary/2026/09/<uuid>.png` |
+| 图片公开可访问 | 直接 GET 返回的 URL | ✅ HTTP 200，`content-type=image/png`，70 bytes |
+| 对象持久化 | 检查 MinIO data 目录 | ✅ `data/diary/2026/09/<uuid>.png/xl.meta` |
+| 附件落库 | 查询 t_attachment | ✅ `id=1, user_id=1, test.png, 70, image/png` |
+| 非图片文件 | 上传 .txt | ✅ HTTP 400「仅支持 jpg / jpeg / png / gif / webp 格式」 |
+| 未认证上传 | 无 token | ✅ HTTP 401 |
+| 前端构建 | `npm run build` | ✅ 2504 KB（gzip 812 KB） |
+
+**遗留事项**
+
+1. 前端单 chunk 已达 2.5 MB（gzip 812 KB）→ 交由 P6 路由懒加载处理。
+2. 浏览器端三种插图方式（按钮 / 拖拽 / 粘贴）未自动化验证，需人工确认。
+3. 归档版 MinIO 无安全更新，公网部署前必须替换。
+4. 图片未做压缩 / 缩略图，大图会影响加载速度。
+
+**下一步（P6）**：前端体验完善——路由懒加载分包、加载态与空态、错误边界、主题切换。
+
 ---
 
-## P6 · 前端体验完善（1 天，可与 P5/P7 并行）
+## P6 · 前端体验完善（1 天，可与 P5/P7 并行）✅ 已完成（2026-09-23）
 
 ### 目标
 补齐加载态、空态、错误态、主题、响应式等体验细节。
@@ -583,9 +784,56 @@ diary-fullstack-platform/
 3. 暗色主题下所有页面可读。
 4. 未保存直接关闭编辑页有二次确认。
 
+### 完成记录（2026-09-23）✅
+
+**范围说明**：Markdown 编辑与渲染已在 P3 / P5 落地（MDEditor + `react-markdown` + `rehype-sanitize`），本阶段聚焦加载体验、主题、错误兜底、响应式与产物分包。
+
+**新增 / 调整代码**
+
+| 文件 | 作用 |
+|---|---|
+| `store/useThemeStore.ts` | 主题偏好（Zustand + persist） |
+| `components/ErrorBoundary/` | 全局错误边界，渲染异常不再白屏 |
+| `components/PageLoading/` | 路由懒加载占位 |
+| `utils/date.ts` | 相对时间与友好日期（今天 / 昨天 / 09月20日） |
+| `router/index.tsx` | 全页面 `React.lazy` 分包 |
+| `main.tsx` | 接入暗色算法、错误边界，并把主题写入 `data-theme` |
+| `layouts/MainLayout.tsx` | 主题切换按钮、`breakpoint="lg"` 响应式折叠、背景改用 theme token |
+| `index.css` | Markdown 样式 CSS 变量化 + 暗色适配 + 登录页背景类 |
+| `pages/Login`、`pages/Register` | 背景改用可随主题切换的类 |
+| `pages/DiaryEdit` | 草稿保护（路由拦截 + `beforeunload`） |
+| `components/DiaryCard` | 日期改为友好格式 |
+| `pages/Profile/`、`pages/Stats/` | 补齐侧边栏里缺失的两个页面（Stats 为 P7 占位） |
+
+**设计取舍**
+
+1. **主题用 CSS 变量而非全量覆盖 antd**：组件层交给 `darkAlgorithm`，自定义部分（Markdown 渲染、登录页背景）只需在 `[data-theme='dark']` 下切换变量，改动面最小。
+2. **`MainLayout` 不懒加载**：它是所有受保护页面的外壳，懒加载收益小且会引入额外闪烁。
+3. **草稿保护用 ref 放行而不是 state**：`setIsDirty(false)` 是异步的，`navigate()` 执行时未必已生效；用 `allowNavigateRef` 才能可靠实现「保存后直接跳转」。
+4. **错误边界放在 ConfigProvider 内层**，使错误页也能继承 antd 主题 token。
+5. **补齐 `Profile` / `Stats` 页面**：侧边栏此前已有这两个菜单项但无对应路由，点击会落到 404。
+
+**验收实测结果**
+
+| 验收项 | 方式 | 结果 |
+|---|---|---|
+| 主 chunk 体积 | `npm run build` | ✅ **2504 KB → 474 KB（gzip 148 KB），降幅 81%** |
+| 分包粒度 | 产物列表 | ✅ 38 个 chunk；DiaryList 10.9 KB / DiaryDetail 7.3 KB / TagManage 17.8 KB / Profile 1.9 KB |
+| 前端构建 | `npm run build` | ✅ 无类型错误 |
+| 服务状态 | 端口探测 | ✅ 3306 / 6379 / 9000 / 8080 / 5173 全部监听 |
+| 暗色主题 | 人工确认 | ⏳ 同步 antd `darkAlgorithm` 与 `[data-theme]` |
+| 草稿保护 | 人工确认 | ⏳ 改内容后点侧边栏应弹确认框；刷新应被浏览器拦截 |
+
+**遗留事项**
+
+1. 浏览器侧交互（主题切换、草稿确认弹窗、窄屏自动折叠）未自动化验证，需人工确认。
+2. 仍有 chunk 超过 500 KB 的构建提示（antd 组件共享 chunk），gzip 后不影响实际加载，暂不处理。
+
+**下一步（P7）**：统计页——写作热力图、心情分布、连续打卡天数。
+
 ---
 
-## P7 · 统计页（1.5 天）
+## P7 · 统计页（1.5 天）✅ 已完成（2026-09-23）
 
 ### 目标
 提供写作热力图、心情分布、连续打卡天数等可视化统计。
@@ -617,6 +865,75 @@ diary-fullstack-platform/
 ### 风险
 - 连续天数算法边界（当天没写但昨天写了，当前连续应为 0 还是延续）→ 需明确产品定义并写单测。
 - 时区导致跨日统计偏移 → 统一以 `diary_date` 为准。
+
+### 完成记录（2026-09-23）✅
+
+**新增代码**
+
+后端：
+
+| 文件 | 作用 |
+|---|---|
+| `vo/DayCountVO`、`vo/MoodCountVO`、`vo/StatsOverviewVO` | 统计出参 |
+| `mapper/DiaryMapper` 新增 3 个聚合查询 | 区间每日篇数 / 全部写作日期 / 心情分布，均走 `idx_user_date`、`idx_user_mood` |
+| `service/StatsService` + `impl/StatsServiceImpl` | 连续天数算法与概览组装 |
+| `controller/StatsController` | `GET /stats/calendar`、`GET /stats/overview` |
+
+前端：
+
+| 文件 | 作用 |
+|---|---|
+| `api/stats.ts`、`hooks/useStats.ts` | 接口封装与 hooks（热力图结果直接转成「日期 → 篇数」Map） |
+| `pages/Stats/` | 4 张数字卡片 + 年份切换热力图 + 心情环形图 |
+| `index.css` | 热力图 5 级色阶（含暗色适配） |
+
+**产品定义（已固化到代码与单测）**
+
+「当前连续打卡天数」以**今天**为基准向前计数：
+
+| 最近一篇的日期 | 当前连续 |
+|---|---|
+| 今天 | 从今天起算 |
+| 昨天 | **延续**（今天还没结束，不算断） |
+| 早于昨天 | 0 |
+
+**设计取舍**
+
+1. **热力图只返回有记录的日期**，空白格子由前端补齐——一年 365 天多数为空，全量返回纯属浪费。
+2. **心情分布用 `IFNULL(mood, 0)` 把未记录心情的日记归入 0**，从而保证「各段之和恒等于总篇数」；前端把 0 渲染为「未记录」。
+3. **连续天数只查一次全部日期**，首末日期与两个连续指标复用同一份结果，避免 3 次往返。
+4. **未做 Redis 缓存**：单次聚合查询走索引，当前数据量下无必要（YAGNI），留待真实性能问题出现再加。
+5. **统计单测使用独立用户 ID（90001+）**，与真实账号彻底隔离，理由见下方踩坑记录。
+
+**验收实测结果**
+
+| 验收项 | 方式 | 结果 |
+|---|---|---|
+| 单元测试 | `.\mvnw.cmd test` | ✅ **17 个全通过**（新增 StatsServiceTest 7 个） |
+| 热力图日期对应 | 断言 `calendar(2026)` 的日期与 `diary_date` 一致、跨年不串 | ✅ |
+| 心情分布求和 | 4 篇（含 1 篇无心情）→ 各段之和 = 总篇数 | ✅ |
+| 连续天数边界 | 逐日增长 / 中间断档 / 今天未写延续 / 早于昨天归零 | ✅ |
+| 数据隔离 + 逻辑删除 | 删除后指标同步下降；他人视角全为 0 | ✅ |
+| 年份越界 | `calendar(1900)` | ✅ 400「年份超出可统计范围」 |
+| HTTP `overview` | 真实数据实测 | ✅ `totalCount=1, monthCount=1, currentStreak=1, longestStreak=1, moodDistribution=[{1,1}]` |
+| HTTP `calendar` | 真实数据实测 | ✅ `[{diaryDate:"2026-09-23", total:1}]` |
+| 未认证访问 | 无 token | ✅ HTTP 401 |
+| 前端构建 | `npm run build` | ✅ Stats chunk 333.8 KB（懒加载，不影响首屏） |
+
+**踩坑记录**
+
+1. **测试依赖了真实数据导致失败**：`StatsServiceTest` 最初沿用 `tester`（id=1）并断言「总篇数 = 4」，实际得到 5。查库发现该账号下有一条通过 UI 创建的真实日记（id=16、日期为当天），既让计数多 1，也让「当前连续」从 0 变成 1。**改用独立用户 ID（90001+）** 后彻底隔离。
+   > 教训：**断言绝对数值的测试必须自带隔离数据**。同一类脆弱性也存在于 `TagServiceTest.isolation`（对用户 999 用了 `containsExactly`），当前通过是因为该用户从未产生数据。
+2. **连续天数断言算错**：日期集合为 `{t-2, t-1}` 时，从昨天向前回溯实际连续 2 天，我最初写成 1。修正后把「今天未写是否延续」这条产品规则拆成独立用例，边界才真正被覆盖。
+3. **MyBatis 的 record 结果映射可用**：`DayCountVO` / `MoodCountVO` 直接用 record 接聚合结果，无需 `@Results` 手工映射——前提是编译带 `-parameters` 保留构造器参数名（Spring Boot 父 POM 默认开启）。
+
+**遗留事项**
+
+1. 热力图一年约 371 个 DOM 节点未做虚拟滚动，当前量级无压力。
+2. 未缓存统计结果；数据量增长后可加 Redis 短 TTL 缓存。
+3. 浏览器侧交互（年份切换、环形图 tooltip、暗色下色阶）未自动化验证，需人工确认。
+
+**下一步（P8）**：Dockerfile + docker-compose + Nginx 反代与静态托管、备份脚本。
 
 ---
 
@@ -669,11 +986,11 @@ Docker Compose 一键启动全栈，Nginx 提供静态资源与反向代理。
 [x] P0 环境与工程初始化
 [x] P1 数据库与后端基础设施
 [x] P2 认证全链路          ← 关键风险
-[ ] P3 日记 CRUD
-[ ] P4 标签与筛选
-[ ] P5 图片上传 MinIO
-[ ] P6 前端体验完善
-[ ] P7 统计页
+[x] P3 日记 CRUD
+[x] P4 标签与筛选
+[x] P5 图片上传 MinIO
+[x] P6 前端体验完善
+[x] P7 统计页
 [ ] P8 部署与上线
 [ ] P9 可选扩展
 ```
@@ -694,3 +1011,70 @@ Docker Compose 一键启动全栈，Nginx 提供静态资源与反向代理。
 | 第 2 周 | P3 + P4（核心业务闭环） |
 | 第 3 周 | P5 + P6 + P7（附件、体验、统计） |
 | 第 4 周 | P8 + 缓冲（部署、修复、文档） |
+
+---
+
+## 附录 D · 本机开发环境清单（截至 2026-09-23）
+
+### 工具链
+
+| 组件 | 版本 | 位置 / 说明 |
+|---|---|---|
+| JDK | 25.0.4.1 LTS | `C:\Program Files\Java\jdk-25.0.4.1`（未设置 `JAVA_HOME`，仅在 PATH 中） |
+| Node.js / npm | 22.21.0 / 10.9.4 | `D:\nvmw\nodejs` |
+| Git | 2.51.0 | — |
+| Maven | 3.9.16 | 由 Maven Wrapper 自动下载到 `%USERPROFILE%\.m2\wrapper\dists\`，无需系统安装 |
+
+### 中间件（绿色免安装，统一放在 `D:\business\tools`）
+
+| 组件 | 版本 | 目录 | 启停脚本 | 连接信息 |
+|---|---|---|---|---|
+| MySQL | 8.4.9 | `mysql-8.4.9-winx64` | `mysql-start.ps1` / `mysql-stop.ps1` | `127.0.0.1:3306`，`root` / `123456`，库 `diary` |
+| Redis | 5.0.14.1 | `redis-5.0.14.1` | `redis-start.ps1` / `redis-stop.ps1` | `127.0.0.1:6379`，无密码 |
+| MinIO | 归档版 `RELEASE.2025-07-23T15-54-02Z` | `minio` | `minio-start.ps1` / `minio-stop.ps1` | S3 API `127.0.0.1:9000`，控制台 `127.0.0.1:9001`，`minioadmin` / `minioadmin` |
+
+- 均**未注册为 Windows 服务**，重启机器后需手动启动；脚本幂等，可重复执行。
+- **脚本编码要求**：所有 `.ps1` 必须保存为 **UTF-8 with BOM**。Windows PowerShell 5.1 会把无 BOM 的 UTF-8 按 GBK 解码，导致中文提示乱码并直接引发脚本解析失败。
+
+### IDE 扩展（CodeBuddy CN）
+
+CLI 入口：`C:\Users\DELL\AppData\Local\Programs\CodeBuddy CN\bin\buddycn.cmd`
+
+为方便查看数据，已安装：
+
+| 扩展 ID | 版本 | 用途 |
+|---|---|---|
+| `cweijan.vscode-database-client2` | 9.0.2 | Database Client，图形化查看 / 管理 MySQL |
+| `cweijan.dbclient-jdbc` | 1.4.2 | 上述扩展的 JDBC 驱动支持 |
+| `redis.redis-for-vscode` | IDE 预装 | Redis 官方扩展，查看 `diary:refresh:*` 等键 |
+
+重装环境时可直接复用：
+
+```powershell
+$cli = "C:\Users\DELL\AppData\Local\Programs\CodeBuddy CN\bin\buddycn.cmd"
+& $cli --install-extension cweijan.vscode-database-client2
+& $cli --install-extension cweijan.dbclient-jdbc
+```
+
+> 扩展在 IDE 运行期间安装后，需 `Ctrl+Shift+P` → `Reload Window` 才会加载。
+> `vscjava.vscode-java-pack`、`redhat.java`、`ms-python.python`、`vue.volar` 等为 IDE 预装，无需手动处理。
+
+### 一次性工具（不进入项目依赖）
+
+| 工具 | 用途 | 说明 |
+|---|---|---|
+| `bcryptjs`（Node 包） | 生成测试账号 `tester/123456` 的 BCrypt 密文 | 安装在系统临时目录，**未写入 `frontend/package.json`** |
+| `mysql.exe` / `redis-cli.exe` | 命令行查库与缓存 | 随各自的免安装包提供，无需额外安装 |
+
+### 常用排查命令
+
+```powershell
+# 查看端口占用情况（3306 MySQL / 6379 Redis / 9000-9001 MinIO / 8080 后端 / 5173 前端）
+foreach ($p in @(3306,6379,9000,9001,8080,5173)) {
+    $l = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue
+    if ($l) { "port $p : LISTENING (pid $($l[0].OwningProcess))" } else { "port $p : not listening" }
+}
+
+# 查看 Redis 中的登录令牌
+D:\business\tools\redis-5.0.14.1\redis-cli.exe -h 127.0.0.1 keys "diary:*"
+```

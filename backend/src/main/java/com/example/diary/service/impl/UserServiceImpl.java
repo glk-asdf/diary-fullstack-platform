@@ -3,6 +3,7 @@ package com.example.diary.service.impl;
 import com.example.diary.common.exception.BizException;
 import com.example.diary.common.result.ResultCode;
 import com.example.diary.common.util.SecurityUtil;
+import com.example.diary.converter.UserConverter;
 import com.example.diary.dto.UpdateProfileDTO;
 import com.example.diary.entity.User;
 import com.example.diary.mapper.UserMapper;
@@ -23,7 +24,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserVO getCurrentUser() {
-        return toVO(requireCurrentUser());
+        return UserConverter.toVO(requireCurrentUser());
     }
 
     @Override
@@ -42,7 +43,7 @@ public class UserServiceImpl implements UserService {
         }
 
         userMapper.updateById(user);
-        return toVO(user);
+        return UserConverter.toVO(user);
     }
 
     private User requireCurrentUser() {
@@ -51,9 +52,5 @@ public class UserServiceImpl implements UserService {
             throw new BizException(ResultCode.NOT_FOUND, "用户不存在");
         }
         return user;
-    }
-
-    private UserVO toVO(User user) {
-        return new UserVO(user.getId(), user.getUsername(), user.getNickname(), user.getAvatar(), user.getEmail());
     }
 }

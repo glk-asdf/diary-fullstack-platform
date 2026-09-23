@@ -16,3 +16,179 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* ------------------------------------------------------------
+   主题变量：由 main.tsx 写入 document.documentElement.dataset.theme
+   仅用于 antd 覆盖不到的少量自定义样式（Markdown 渲染、登录页背景）
+   ------------------------------------------------------------ */
+:root {
+  --md-border: #f0f0f0;
+  --md-bg-code: rgba(0, 0, 0, 0.05);
+  --md-bg-pre: #f6f8fa;
+  --md-bg-blockquote: #fafafa;
+  --md-border-blockquote: #d9d9d9;
+  --md-text-secondary: rgba(0, 0, 0, 0.45);
+}
+
+[data-theme='dark'] {
+  --md-border: #303030;
+  --md-bg-code: rgba(255, 255, 255, 0.12);
+  --md-bg-pre: #1f1f1f;
+  --md-bg-blockquote: #1a1a1a;
+  --md-border-blockquote: #434343;
+  --md-text-secondary: rgba(255, 255, 255, 0.45);
+}
+
+/* 登录 / 注册页背景 */
+.auth-page-bg {
+  background: linear-gradient(135deg, #e6f4ff 0%, #f5f5f5 60%);
+}
+
+[data-theme='dark'] .auth-page-bg {
+  background: linear-gradient(135deg, #111a2c 0%, #141414 60%);
+}
+
+/* ---------- Markdown 渲染样式（日记详情页） ---------- */
+.markdown-body {
+  line-height: 1.75;
+  word-break: break-word;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  margin-top: 1.2em;
+  margin-bottom: 0.6em;
+  font-weight: 600;
+}
+
+.markdown-body h1 {
+  font-size: 1.6em;
+}
+
+.markdown-body h2 {
+  font-size: 1.35em;
+}
+
+.markdown-body h3 {
+  font-size: 1.15em;
+}
+
+.markdown-body p {
+  margin: 0.6em 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.6em;
+  margin: 0.6em 0;
+}
+
+.markdown-body blockquote {
+  margin: 0.8em 0;
+  padding: 0.4em 1em;
+  color: var(--md-text-secondary);
+  background: var(--md-bg-blockquote);
+  border-left: 4px solid var(--md-border-blockquote);
+}
+
+.markdown-body code {
+  padding: 0.15em 0.4em;
+  font-size: 0.9em;
+  background: var(--md-bg-code);
+  border-radius: 4px;
+}
+
+.markdown-body pre {
+  padding: 12px 16px;
+  overflow: auto;
+  background: var(--md-bg-pre);
+  border-radius: 6px;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  border-radius: 6px;
+}
+
+.markdown-body table {
+  width: 100%;
+  margin: 0.8em 0;
+  border-collapse: collapse;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 8px 12px;
+  border: 1px solid var(--md-border);
+}
+
+.markdown-body th {
+  font-weight: 600;
+  background: var(--md-bg-blockquote);
+}
+
+.markdown-body hr {
+  margin: 1.2em 0;
+  border: none;
+  border-top: 1px solid var(--md-border);
+}
+
+/* ---------- 写作热力图（统计页） ---------- */
+.heat-cell {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+/* 补齐整周用的占位格（属于相邻年份），不可见但占据布局 */
+.heat-out {
+  visibility: hidden;
+}
+
+.heat-0 {
+  background: #ebedf0;
+}
+
+.heat-1 {
+  background: #c6e48b;
+}
+
+.heat-2 {
+  background: #7bc96f;
+}
+
+.heat-3 {
+  background: #239a3b;
+}
+
+.heat-4 {
+  background: #196127;
+}
+
+[data-theme='dark'] .heat-0 {
+  background: #2d333b;
+}
+
+[data-theme='dark'] .heat-1 {
+  background: #0e4429;
+}
+
+[data-theme='dark'] .heat-2 {
+  background: #006d32;
+}
+
+[data-theme='dark'] .heat-3 {
+  background: #26a641;
+}
+
+[data-theme='dark'] .heat-4 {
+  background: #39d353;
+}
