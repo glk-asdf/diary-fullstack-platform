@@ -1,0 +1,9 @@
+# 依赖与产物一律在镜像内重新生成，不把宿主机的 node_modules 带进去
+# （宿主机可能是 Windows，原生模块与容器不兼容）
+node_modules/
+dist/
+.vite/
+
+*.log
+.env
+.env.*

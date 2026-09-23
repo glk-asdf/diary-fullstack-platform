@@ -1,0 +1,73 @@
+# ============================================================
+# 生产环境配置（容器部署）
+# 只写与 dev 的差异项，其余沿用 application.yml
+# 由 SPRING_PROFILES_ACTIVE=prod 激活
+# ============================================================
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # 容器内通过服务名访问 MySQL，不走宿主端口
+    url: jdbc:mysql://${DB_HOST:mysql}:${DB_PORT:3306}/${DB_NAME:diary}?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    username: ${DB_USER:root}
+    # 刻意不给默认值：未配置时启动即失败，避免带着弱密码上线
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      pool-name: diaryHikariPool
+
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    # 生产不打印 SQL，避免日志里出现用户内容
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.example.diary.entity
+
+springdoc:
+  # 生产默认关闭接口文档，避免对外暴露完整 API 结构。
+  # 需要临时排查时可设 SPRINGDOC_ENABLED=true 后重启后端容器。
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
+
+diary:
+  jwt:
+    # 生产环境不给默认值：缺失则启动失败，杜绝用开发密钥上线
+    secret: ${JWT_SECRET}
+  minio:
+    # 后端走容器网络访问 MinIO
+    endpoint: ${MINIO_ENDPOINT:http://minio:9000}
+    # 浏览器访问地址：由 Nginx 把 MinIO 挂在同源 /files/ 下，
+    # 这样既不用对外暴露 9000 端口，也不受跨域与混合内容限制。
+    # 最终图片地址形如 /files/diary/2026/09/xxx.webp
+    public-endpoint: ${MINIO_PUBLIC_ENDPOINT:/files}
+    access-key: ${MINIO_ACCESS_KEY}
+    secret-key: ${MINIO_SECRET_KEY}
+    bucket: ${MINIO_BUCKET:diary}
+    max-file-size: ${MINIO_MAX_FILE_SIZE:5242880}
+
+logging:
+  level:
+    root: info
+    com.example.diary: info

@@ -1,0 +1,163 @@
+# ============================================================
+# 单机一键部署：docker compose up -d
+#
+# 设计取舍：
+#   1. 对外只暴露 Nginx 一个端口（默认 80）。MySQL / Redis / MinIO / 后端
+#      全部只在集群内网互通，既不占宿主端口（避免与本地开发环境抢
+#      3306/6379/9000/8080），也不把这些服务直接暴露到公网。
+#   2. MinIO 不给宿主端口，图片由 Nginx 以 /files/ 反代出去，
+#      前端因此与后端同源，不需要 CORS。
+#   3. 所有镜像 tag 都写死到具体版本，保证「今天能起、明年也能起」。
+# ============================================================
+name: diary
+
+services:
+  # ---------------- 数据库 ----------------
+  mysql:
+    image: mysql:8.4.9
+    container_name: diary-mysql
+    restart: unless-stopped
+    environment:
+      # :? 表示缺失即报错退出——宁可起不来，也不要带着默认密码上线
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME:-diary}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    # 仅供宿主机上的数据库客户端连接（如 CodeBuddy 的 Database Client 扩展）。
+    # 用 3307 而不是 3306，避免与本地开发用的免安装版 MySQL 抢端口；
+    # 并且只绑定 127.0.0.1，局域网内其他机器连不上，不扩大暴露面。
+    # 不需要 GUI 工具时删掉这段，即可恢复「数据库完全不对外」。
+    ports:
+      - "127.0.0.1:${DB_HOST_PORT:-3307}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # 首次启动（数据卷为空）时自动执行建表脚本
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      # 用 CMD-SHELL 让密码在容器内展开，避免密码含特殊字符时解析出错
+      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - diary-net
+
+  # ---------------- 缓存（Refresh Token） ----------------
+  redis:
+    image: redis:7.4.11-alpine
+    container_name: diary-redis
+    restart: unless-stopped
+    # 开启 AOF：容器重启后已签发的 Refresh Token 不丢，用户不必重新登录
+    command: [ "redis-server", "--appendonly", "yes" ]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      - diary-net
+
+  # ---------------- 对象存储（图片） ----------------
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: diary-minio
+    restart: unless-stopped
+    # 官方社区版镜像在 Docker Hub 上已下架，镜像源在 quay.io。
+    # 新版本已移除 Web 控制台，bucket 由后端启动时的 MinioBucketInitializer 自动创建。
+    command: [ "server", "/data" ]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?请在 .env 中设置 MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?请在 .env 中设置 MINIO_SECRET_KEY}
+      TZ: Asia/Shanghai
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      # 必须等 MinIO 就绪再启动后端：后端初始化 bucket 失败时只记警告不报错，
+      # 会导致上传接口在第一次重启前一直不可用
+      test: [ "CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks:
+      - diary-net
+
+  # ---------------- 后端 ----------------
+  backend:
+    build:
+      context: ./backend
+    image: diary-backend:local
+    container_name: diary-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-diary}
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?请在 .env 中设置 JWT_SECRET}
+      JWT_ACCESS_EXPIRE: ${JWT_ACCESS_EXPIRE:-1800}
+      JWT_REFRESH_EXPIRE: ${JWT_REFRESH_EXPIRE:-604800}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-/files}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?请在 .env 中设置 MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?请在 .env 中设置 MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET:-diary}
+      MINIO_MAX_FILE_SIZE: ${MINIO_MAX_FILE_SIZE:-5242880}
+      TZ: Asia/Shanghai
+    # 后端默认不对外。需要在宿主机上直接调 /swagger-ui 调试时取消注释；
+    # 注意本机 dev 环境后端也占 8080，需先停掉它。
+    # ports:
+    #   - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      # /api/v1/ping 在 SecurityConfig 的 PUBLIC_PATHS 中，无需 token
+      test: [ "CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/v1/ping" ]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    networks:
+      - diary-net
+
+  # ---------------- 网关 + 前端静态资源 ----------------
+  nginx:
+    build:
+      context: ./frontend
+    image: diary-frontend:local
+    container_name: diary-nginx
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-80}:80"
+    environment:
+      TZ: Asia/Shanghai
+    networks:
+      - diary-net
+
+volumes:
+  mysql-data:
+  redis-data:
+  minio-data:
+
+networks:
+  diary-net:
+    driver: bridge

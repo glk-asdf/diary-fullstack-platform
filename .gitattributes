@@ -1,0 +1,17 @@
+# Linux shell 脚本必须保持 LF。
+# 否则在 Linux 服务器上执行时会报 "bad interpreter: /usr/bin/env bash^M"——
+# Windows 上 core.autocrlf=true 时极易踩到。
+*.sh text eol=lf
+
+# Windows PowerShell 脚本用 CRLF。
+# 注意：deploy/*.ps1 还必须保存为 UTF-8 with BOM，
+# 否则 Windows PowerShell 5.1 会把中文按 GBK 解码，导致乱码甚至解析失败。
+*.ps1 text eol=crlf
+
+# 二进制文件不做换行转换
+*.jar binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

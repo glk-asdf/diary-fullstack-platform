@@ -8,6 +8,16 @@
 --   3. Docker 部署时本文件挂载到 /docker-entrypoint-initdb.d/。
 -- ============================================================
 
+-- 显式声明连接字符集，必须放在所有语句之前。
+--
+-- 原因：Docker 官方 MySQL 镜像的 entrypoint 用 mysql 客户端执行本文件，而容器内 LANG 为空
+-- （LC_CTYPE=POSIX），客户端会把 character_set_client 降级成 latin1。此时文件里的中文
+-- （表注释、测试用户昵称）会被当作 latin1 解读后双重编码写入数据库；更麻烦的是，读回时
+-- 若客户端同样是 latin1，字节会反向抵消而「看起来正常」，很难被发现。
+--
+-- 加上这一行后，无论客户端默认字符集是什么，后续语句的字节都按 UTF-8 解释。
+SET NAMES utf8mb4;
+
 CREATE DATABASE IF NOT EXISTS `diary`
     DEFAULT CHARACTER SET utf8mb4
     DEFAULT COLLATE utf8mb4_unicode_ci;

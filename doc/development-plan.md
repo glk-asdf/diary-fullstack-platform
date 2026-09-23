@@ -1,8 +1,9 @@
 # 日记全栈平台 · 分步开发方案
 
-> 文档版本：v1.1
+> 文档版本：v1.3
 > 创建日期：2026-09-23
-> 最后更新：2026-09-23（P0 完成，回填「实际落地版本」与 P0「完成记录」）
+> 最后更新：2026-09-23（P0~P8 全部完成并回填完成记录；P9 可选扩展未启动）
+> 配套文档：开发过程实录见 `doc/development-log.md`，使用与运维操作见 `doc/usage-guide.md`
 > 对应架构文档：`doc/deepseek_markdown_20260923_c1afe0.md`
 > 目标：把架构设计拆成**可独立验收、可增量交付**的开发阶段，每阶段结束都能跑起来、能演示。
 
@@ -28,7 +29,7 @@
 | P5 | 图片上传 MinIO | P3 | 1.5 天 | Markdown 插图可用 | ✅ 已完成（2026-09-23） |
 | P6 | 前端体验完善 | P3 | 1 天 | 懒加载分包 + 主题 + 错误边界 | ✅ 已完成（2026-09-23） |
 | P7 | 统计页 | P4 | 1.5 天 | 热力图 + 心情分布 | ✅ 已完成（2026-09-23） |
-| P8 | 部署与上线 | P3~P7 | 1.5 天 | 单机一键部署 | ⬜ 待开始 |
+| P8 | 部署与上线 | P3~P7 | 1.5 天 | 单机一键部署 | ✅ 已完成（2026-09-23） |
 | P9 | 可选扩展 | P8 | 按需 | 分享 / 导出 / 备份 | ⬜ 待开始 |
 
 > **关键路径**：P0 → P1 → P2 → P3。P2 是整个项目最大风险点，认证打通后剩余功能基本是同一套模式复制。
@@ -937,20 +938,21 @@ These files are no longer served from this site.
 
 ---
 
-## P8 · 部署与上线（1.5 天）
+## P8 · 部署与上线（1.5 天）✅ 已完成（2026-09-23）
 
 ### 目标
 Docker Compose 一键启动全栈，Nginx 提供静态资源与反向代理。
 
 ### 任务清单
-- [ ] 后端 `Dockerfile`（多阶段构建，JRE 基础镜像）
-- [ ] `docker-compose.yml`：mysql / redis / minio / backend / nginx
-- [ ] `nginx.conf`：`try_files $uri $uri/ /index.html` + `/api/` 反代
-- [ ] `.env` 管理密钥（DB/JWT/MinIO），`.env.example` 入库、`.env` 忽略
-- [ ] 前端构建产物挂载到 Nginx
-- [ ] 配置 `SPRING_PROFILES_ACTIVE=prod`，关闭 dev CORS
-- [ ] MySQL 备份脚本（每日 dump，保留 7 天）+ Windows/Linux 定时任务
-- [ ] 冒烟测试清单（登录、CRUD、上传、统计）
+- [x] 后端 `Dockerfile`（多阶段构建，JRE 基础镜像）
+- [x] `docker-compose.yml`：mysql / redis / minio / backend / nginx
+- [x] `nginx.conf`：`try_files $uri $uri/ /index.html` + `/api/` 反代
+- [x] `.env` 管理密钥（DB/JWT/MinIO），`.env.example` 入库、`.env` 忽略
+- [x] 前端构建产物托管到 Nginx
+      —— 实际采用**多阶段构建打进 Nginx 镜像**（见下方设计取舍 #6），比挂载宿主 `dist/` 更自包含
+- [x] 配置 `SPRING_PROFILES_ACTIVE=prod`（生产由 Nginx 同源反代，本就不依赖 CORS）
+- [x] MySQL 备份脚本（每日 dump，保留 7 天）+ Windows/Linux 定时任务
+- [x] 冒烟测试脚本 `deploy/smoke-test.ps1`（替代纯文档清单，可直接执行）
 - [ ] （可选）HTTPS 证书 + 443 配置
 
 ### 验收标准（DoD）
@@ -964,6 +966,99 @@ Docker Compose 一键启动全栈，Nginx 提供静态资源与反向代理。
 - 前端构建时 `baseURL` 与生产路径不一致 → 统一使用相对 `/api/v1`。
 - 容器启动顺序依赖 → `depends_on` + 后端重试连接（或 healthcheck）。
 - MinIO 对外 endpoint 与内网 endpoint 区分。
+
+### 完成记录（2026-09-23）✅
+
+**环境准备**
+
+| 项 | 结果 |
+|---|---|
+| Docker Desktop | 4.91.0（`winget install Docker.DockerDesktop`，耗时 4 分 53 秒） |
+| docker CLI / compose | 29.8.0 / v5.5.1 |
+| WSL2 | 2.7.14.0（内核 6.18.33.2-2），`VirtualMachinePlatform` 已启用 |
+| 待办 | **首次启用需重启一次**：重启前 `wsl --status` 报「WSL2 无法启动」，守护进程连不上 |
+
+**产出文件**
+
+| 文件 | 作用 |
+|---|---|
+| `backend/Dockerfile` | 多阶段：`eclipse-temurin:25-jdk` 编译 → `25-jre` 运行；先 COPY `pom.xml` 预热依赖以命中层缓存；非 root（uid 1001）运行；`MaxRAMPercentage` 自适应容器内存 |
+| `backend/.dockerignore` | 排除 `target/`、IDE 目录、`.env` |
+| `backend/.../application-prod.yml` | 数据源指向 `mysql`、Redis 指向 `redis`，关闭 SQL 日志与 SpringDoc |
+| `frontend/Dockerfile` | 多阶段：`node:22-alpine` 构建 → `nginx:1.31.6-alpine` 托管 |
+| `frontend/nginx.conf` | `/` 静态 + SPA 回退、`/api/` 反代后端、`/files/` 反代 MinIO |
+| `frontend/.dockerignore` | 排除 `node_modules/`、`dist/`（宿主机是 Windows，原生模块与容器不兼容） |
+| `docker-compose.yml` | 5 个服务 + 3 个具名卷，健康检查串联启动顺序 |
+| `.env.example` | 重写为 **Compose 部署专用**；本地开发默认值在 `application-dev.yml`，不需要 `.env` |
+| `deploy/mysql-backup.ps1` / `.sh` | 容器内 `mysqldump`，保留 7 天，附 `schtasks` / `crontab` 配置 |
+| `deploy/smoke-test.ps1` | 17 项断言：链路、SPA 回退、注册登录刷新登出、CRUD、上传、统计、401 拦截 |
+
+**关键设计取舍**
+
+1. **对外只暴露 Nginx 一个端口**（`APP_PORT` 默认 80）。MySQL / Redis / MinIO / 后端全在集群内网——既不与本地开发环境的 3306/6379/9000/8080 抢端口，也不把数据库暴露到公网。
+2. **MinIO 不映射宿主端口**，图片由 Nginx 以 `/files/` 反代出去（`proxy_pass http://minio:9000/` 会剥掉前缀）。好处：前端与图片同源，不需要 CORS，也不用纠结 `MINIO_PUBLIC_ENDPOINT` 该填哪个主机名。对应 `MINIO_PUBLIC_ENDPOINT=/files`。
+3. **必填密钥用 Compose 的 `${VAR:?}` 语法**：`DB_PASSWORD` / `JWT_SECRET` / `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` 缺失时 `docker compose up` 直接报错退出，不会带着默认弱密码上线。
+4. **`application-prod.yml` 中 `JWT_SECRET` 不给默认值**：缺配置则启动失败。顺带解决 P0 遗留警告 #3——生产关闭 SpringDoc（`SPRINGDOC_ENABLED=true` 可临时打开排查）。
+5. **镜像 tag 全部写死到具体版本**，且逐个用 Docker Hub / Quay API 验证存在：`eclipse-temurin:25-jdk` / `25-jre`、`mysql:8.4.9`、`redis:7.4.11-alpine`、`nginx:1.31.6-alpine`、`node:22-alpine`、`quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z`。
+6. **前端用多阶段构建打进 Nginx 镜像**，而非挂载宿主 `dist/`——全新机器不必先跑一次本地 `npm run build`，符合 DoD #1「全新机器一条命令起来」。
+7. **MinIO 健康检查不可省**：`MinioBucketInitializer` 初始化失败时只记警告、不阻断启动；若不保证 MinIO 先就绪，bucket 建不出来且上传接口会一直不可用。
+
+**验收实测结果（DoD 逐条）**
+
+| # | 验收标准 | 结果 | 证据 |
+|---|---|---|---|
+| 1 | 全新机器 `docker compose up -d` 后可直接注册登录 | ✅ | 5 个容器全部 `Up (healthy)`；经 80 端口注册、登录、`/users/me` 全通 |
+| 2 | 刷新任意前端路由不 404 | ✅ | `GET /stats` 返回 200 且为 `index.html`（冒烟脚本断言 `<div id="root">`） |
+| 3 | `/api/**` 正确代理到后端，无跨域报错 | ✅ | `/api/v1/ping` 经 nginx 返回 `status=UP`；前后端同源，不触发 CORS |
+| 4 | 容器重启后数据不丢失 | ✅ | `docker compose down` + `up -d` 后，日记 id=2 与 MinIO 图片（127 字节）均可读回 |
+| 5 | 备份脚本生成 dump 并清理过期文件 | ✅ | 产出 `diary-20260923-171851.sql`（8.7 KB）；预置的 30 天前假备份被自动清理 |
+
+**补充验证**
+
+| 项 | 结果 |
+|---|---|
+| `deploy/smoke-test.ps1` | ✅ **17 项全通过**，退出码 0 |
+| 生产关闭 SpringDoc | ✅ 后端 `/v3/api-docs`、`/swagger-ui.html` 均返回 404 |
+| 生产关闭 SQL 日志 | ✅ 后端日志 `Preparing:` 0 次、`DEBUG` 0 次，仅 INFO |
+| 镜像构建耗时 | 首次约 5 分钟（拉镜像 + 容器内 Maven/npm）；改代码后重建仅 **19 秒**（层缓存命中） |
+| 容器启动顺序 | ✅ 健康检查串联生效：mysql/redis/minio 全部 healthy 后才启动 backend，backend healthy 后才启动 nginx |
+| MinIO 镜像健康检查 | ✅ 镜像内确有 `curl`，`/minio/health/live` 探测通过（此前存疑，已确认） |
+
+**过程中发现并修复的两个缺陷**
+
+1. **未匹配路径被兜底成 500**（`GlobalExceptionHandler`）
+   - 现象：关闭 springdoc 后访问 `/v3/api-docs`，后端返回 `HTTP 500 {"code":500,"message":"服务器开小差了"}`。
+   - 根因：Spring 6.1+ 对未映射路径抛 `NoResourceFoundException`，被兜底的 `@ExceptionHandler(Exception.class)` 捕获。
+   - 影响不止接口文档：**任何拼错的 URL、或扫描器对任意路径的探测，都会往日志里写一条 ERROR 级完整堆栈**，应用一暴露到公网日志很快被灌满。
+   - 修复：显式声明 `NoResourceFoundException` / `NoHandlerFoundException` → 404 + `log.warn`（不带堆栈）。
+   - 验证：`/v3/api-docs` → 404；日志中 `ERROR` 计数归零，`路径不存在` WARN 3 条。
+   - 注意 `/api/v1/not-exist` 仍返回 **401**：Security 在路由解析前就拦截了未认证请求，这是正确的，不泄露路由是否存在。
+
+2. **nginx 缓存上游 IP，重建后端后持续 502**
+   - 现象（潜在，未爆发即修复）：`proxy_pass http://backend:8080` 是字面量，nginx 只在启动时解析一次主机名并缓存 IP；而 README 推荐的重部署命令 `docker compose up -d --build` 会重建后端容器、换掉 IP，此后 nginx 一直 502，直到手动 `restart nginx`。
+   - 修复：加 `resolver 127.0.0.11 valid=10s;`，并将 `proxy_pass` 改写为变量形式（变量形式下 nginx 按 TTL 重新解析）。`/files/` 在变量形式下无法自动剥前缀，改用 `rewrite ^/files/(.*)$ /$1 break;` 手动剥——注意 `set` 必须写在 `rewrite` 之前，否则会被 `break` 跳过。
+   - 验证：用占位容器抢占后端旧 IP，强制后端从 `172.18.0.5` 换到 `172.18.0.7`，**nginx 全程未重启**，`/api/v1/ping` 与 `/files/` 仍返回 200。
+
+**踩坑记录**
+
+1. **重启后本机中间件全部未启动**：MySQL / Redis / MinIO 的启停脚本刻意未注册为 Windows 服务，重启机器后需手动启动。本地跑测试会因此报 `Communications link failure`，17 个测试全挂——本次就先怀疑了刚改的代码，实际是环境没起。**排查顺序上应先看服务状态，再看代码。**
+2. **Docker 会复用刚释放的 IP**：验证 nginx 的 DNS 缓存问题时，直接重建后端仍拿到同一 IP，测试不具说服力；必须先用占位容器抢走旧 IP 才能真正验证。
+3. **容器内 mysql 客户端默认 latin1，把中文写成了双重编码**
+   - 根因：`sql/init.sql` 由官方 MySQL 镜像的 entrypoint 在容器内执行，而容器内 `LANG` 为空（`LC_CTYPE=POSIX`），mysql 客户端据此把 `character_set_client / connection / results` 全部降级为 **latin1**。文件里的中文（5 张表注释、测试用户昵称「测试用户」）被当作 latin1 解读后双重编码写入。
+   - **发现过程**：在 Exec 里查 `t_diary` 数据，中文显示成 `?????`；但同一个客户端查 `information_schema.TABLE_COMMENT` 却显示正常。这不合常理，于是改用服务端计算的 `CHAR_LENGTH` / `LENGTH` / `HEX` 对比——`t_diary.title` 是 5 字符 / 15 字节（正确 UTF-8），而表注释是 **9 字符 / 19 字节**（`日记表` 正常应为 3 字符 / 9 字节），确认是双重编码。
+   - **为什么难发现**：双重编码的数据配上同样是 latin1 的客户端读回时，字节会反向抵消，显示反而是对的。也就是说——「显示正常」恰恰是乱码的证据。
+   - **影响范围**：表注释（纯元数据，无功能影响）+ `tester` 昵称（**用户可见**，登录后界面会显示乱码）。
+   - **修复**：`sql/init.sql` 顶部加 `SET NAMES utf8mb4;`，使脚本不再依赖客户端默认字符集。容器内手动敲 SQL 时必须带 `--default-character-set=utf8mb4`——否则不只是显示问题，**写中文会直接存成乱码**。
+   - **验证**：`docker compose down -v` 删卷触发重新初始化后，表注释变为 3 字符 / 9 字节、`tester` 昵称变为 4 字符 / 12 字节，中文正常显示；冒烟测试仍 17/17 通过。
+
+**遗留事项**
+
+1. `deploy/backups/` 已加入 `.gitignore`（dump 含真实用户数据，绝不能入库）。
+2. MinIO 开源版已归档，对外部署建议换 SeaweedFS 或云厂商 OSS。
+3. HTTPS 证书 + 443 未做（原计划即标为可选）。
+4. 未配置容器资源上限（`deploy.resources.limits`）与日志轮转（`logging.options.max-size`）——单机自用暂不需要，数据量上来后值得补。
+
+> 遗留提示：MinIO 开源版已被官方归档（本机 P5 用的是 `RELEASE.2025-07-23` 归档版），Quay 上 `RELEASE.2025-09-07` 仍可拉取。若将来要对外部署，建议换 SeaweedFS 或云厂商 OSS——后端走 S3 协议，替换成本主要在 `MinioConfig`。
 
 ---
 
@@ -991,7 +1086,7 @@ Docker Compose 一键启动全栈，Nginx 提供静态资源与反向代理。
 [x] P5 图片上传 MinIO
 [x] P6 前端体验完善
 [x] P7 统计页
-[ ] P8 部署与上线
+[x] P8 部署与上线
 [ ] P9 可选扩展
 ```
 

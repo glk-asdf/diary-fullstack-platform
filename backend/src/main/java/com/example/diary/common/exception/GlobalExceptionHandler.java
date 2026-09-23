@@ -13,6 +13,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 全局异常处理。
@@ -61,6 +63,22 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
                 .body(Result.fail(ResultCode.BAD_REQUEST.getCode(), "不支持的请求方法: " + e.getMethod()));
+    }
+
+    /**
+     * 未匹配到任何处理器（含静态资源）时返回 404。
+     *
+     * <p>必须显式声明：否则这两个异常会落进下面的兜底分支变成 500，
+     * 并打出一条 ERROR 级完整堆栈——意味着一个拼错的 URL、或是扫描器对任意路径的探测，
+     * 都能往生产日志里灌垃圾。真实排查中被这类噪音淹没是很常见的事故。</p>
+     *
+     * <p>只记 warn 且不带堆栈，与「资源不存在」的实际严重程度相称。</p>
+     */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<Result<Void>> handleNotFound(Exception e) {
+        log.warn("路径不存在: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Result.fail(ResultCode.NOT_FOUND));
     }
 
     @ExceptionHandler(Exception.class)
