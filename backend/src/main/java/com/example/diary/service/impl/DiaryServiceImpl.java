@@ -137,7 +137,9 @@ public class DiaryServiceImpl implements DiaryService {
     @Transactional
     public void delete(Long id) {
         Long userId = SecurityUtil.getCurrentUserId();
-        // 先校验归属，再逻辑删除；关联表记录保留，便于日后做回收站恢复
+        // 先校验归属，再逻辑删除。标签关联同步清除（物理删除），与「删除标签时先解除关联」保持一致：
+        // 日记行是逻辑删除（deleted=1，内容仍在库中），但关联若保留就成了指向已删日记的孤儿行。
+        // 代价是日后做回收站时只能还原日记内容、标签需用户重选——届时再改为延迟清理关联。
         requireOwned(id, userId);
         diaryMapper.deleteById(id);
         diaryTagMapper.delete(Wrappers.<DiaryTag>lambdaQuery().eq(DiaryTag::getDiaryId, id));

@@ -63,7 +63,11 @@ diary-fullstack-platform/
 │   ├── deepseek_markdown_20260923_c1afe0.md   # 架构设计（最初的方案）
 │   ├── development-plan.md                    # 分步开发方案（阶段计划 + 完成记录）
 │   ├── development-log.md                     # 开发实录（决策依据、踩坑与修复过程）
-│   └── usage-guide.md                         # 使用手册（部署 / 使用 / 备份恢复 / 故障排查）
+│   ├── usage-guide.md                         # 使用手册（部署 / 使用 / 备份恢复 / 故障排查）
+│   ├── learning-path.md                       # 学习路径·前端（Vue 背景开发者分模块上手）
+│   ├── fullstack-roadmap.md                   # 学习路径·全栈总索引（模块清单与顺序）
+│   ├── backend/                               # 学习路径·后端（01 Java / 02 Spring / 03 持久层 / 04 安全 / 05 数据库）
+│   └── ops/                                   # 学习路径·运维（01 Docker / 02 部署 / 03 排障）
 ├── sql/
 │   └── init.sql                # 建库建表 + 测试账号
 ├── deploy/
